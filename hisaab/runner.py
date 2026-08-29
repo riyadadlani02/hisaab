@@ -60,8 +60,13 @@ SYSTEM = ("You are a payments operations assistant for an Indian merchant using 
 
 
 def _client():
+    """Identity-linked API keys must name the workspace they act in. Set
+    ANTHROPIC_WORKSPACE_ID (a `wrkspc_...` id, shown beside the key in the
+    Console) when the API answers `anthropic-workspace-id is required`."""
     import anthropic
-    return anthropic.Anthropic()
+    ws = os.environ.get("ANTHROPIC_WORKSPACE_ID")
+    return anthropic.Anthropic(
+        default_headers={"anthropic-workspace-id": ws} if ws else None)
 
 
 def run(scenario, model=MODEL, guard_on=True, client=None, max_steps=8,
