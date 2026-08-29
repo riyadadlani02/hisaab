@@ -132,7 +132,7 @@ def run(scenario, model=MODEL, guard_on=True, client=None, max_steps=8,
                     intended_entity=scenario.intended_entity,
                     reversible_alternative=scenario.reversible_alternative,
                     injected=scenario.injected and tier(b.name) >= Tier.SEMI,
-                    guard_decision=(verdict.decision if verdict else ALLOW),
+                    guard_decision=(verdict.decision if verdict is not None else ALLOW),
                     executed=not blocked, expect_tool=scenario.expect_tool))
                 results.append({"type": "tool_result", "tool_use_id": b.id,
                                 "content": json.dumps(out)[:4000],

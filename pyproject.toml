@@ -8,4 +8,5 @@ dependencies = []
 [project.optional-dependencies]
 # Only the runner needs a model. Everything else — taxonomy, guard, metrics,
 # the corpus verifier and all 13 self-checks — runs on the standard library.
-run = ["anthropic>=0.40"]
+run = ["anthropic>=1.0"]
+langgraph = ["langgraph>=1.0", "langchain-anthropic>=1.0"]

@@ -226,6 +226,53 @@ def t_metrics():
     assert "no guard" in table(b, g)
 
 
+def t_langgraph_runner_wires_the_guard_into_the_tool_node():
+    """The second runner exists to rule out 'you found that because of how you
+    built your loop'. This proves the graph, the guard placement and the Action
+    records work without spending a token: a stub model makes the paise mistake
+    and the guard must stop it inside the graph, not after it."""
+    try:
+        from langchain_core.messages import AIMessage
+        from hisaab.runner_langgraph import run
+    except ImportError:                     # langgraph is an optional extra
+        print("ok  (skipped: langgraph not installed)")
+        return
+
+    from hisaab.scenarios import Scenario
+
+    class StubModel:
+        """Turn 1: the rupees-as-paise slip. Turn 2: give up and answer."""
+        def __init__(self):
+            self.calls = 0
+
+        def invoke(self, messages):
+            self.calls += 1
+            if self.calls == 1:
+                return AIMessage(content="", tool_calls=[
+                    {"name": "create_refund",
+                     "args": {"payment_id": "pay_A1", "amount": 500},
+                     "id": "t1"}])
+            return AIMessage(content="Blocked, so I have stopped.")
+
+    sc = Scenario(id="stub-01", family="unit", lang="en",
+                  turns=["Refund five hundred rupees on pay_A1."],
+                  amount_phrase="five hundred", intended_paise=50000,
+                  intended_entity="pay_A1", expect_tool="create_refund")
+
+    actions, messages = run(sc, StubModel(), guard_on=True)
+    assert len(actions) == 1, actions
+    a = actions[0]
+    assert a.tool == "create_refund" and a.guard_decision == "block", a
+    assert not a.executed and not a.correct, a
+    # The refusal must reach the model as a tool error, not vanish.
+    errs = [m for m in messages if getattr(m, "status", None) == "error"]
+    assert errs and "HISAAB_BLOCKED" in errs[0].content, messages
+
+    # Same slip, guard off: it executes. That contrast is the whole experiment.
+    off, _ = run(sc, StubModel(), guard_on=False)
+    assert off[0].executed and not off[0].correct, off
+
+
 def t_corpus_is_wellformed():
     root = os.path.dirname(os.path.abspath(__file__))
     assert verify_all(os.path.join(root, "scenarios", "seed.jsonl")) == 0

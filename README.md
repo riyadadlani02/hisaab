@@ -110,7 +110,8 @@ paid for, so no number for it appears anywhere in this repo.
 - **130 machine-composed** Indic scenarios, `verified: false`, audited
   separately and excluded from every headline number until a human signs off on
   naturalness (`python -m hisaab.annotate`)
-- 17 scripted checks + the mutation audit, both free of API access
+- 18 scripted checks + the mutation audit, both free of API access
+- two runner shapes (hand-written loop, LangGraph), same tools and guard
 - the audit found seven defects in the guard and one in itself; all are written up
 - second-annotator instrument built; **the pass has not been run**, and the
   author cannot run it — see RESULTS.md § 1c
@@ -132,6 +133,14 @@ python -m hisaab.scenarios       # verify the corpus is well-formed
 ```bash
 ANTHROPIC_API_KEY=... python -m hisaab.runner --family indic
 ```
+
+```bash
+ANTHROPIC_API_KEY=... python -m hisaab.runner_langgraph --family indic
+```
+
+Both runners share `TOOLS`, `SYSTEM`, the corpus, the guard and the metrics —
+only the orchestration differs. If the unit and Indic failures appear under
+both, they are a property of the boundary rather than of either loop.
 
 The runner executes every scenario twice — unguarded and guarded — and prints
 the delta. Tool descriptions mirror `razorpay-mcp-server`'s wording, "in paise"
@@ -155,6 +164,7 @@ hisaab/audit.py      guard coverage + false-positive accounting, no model
 hisaab/annotate.py   blind worksheet + inter-annotator agreement
 hisaab/generate.py   attested-shape sweep of the Indic amount space
 hisaab/runner.py     manual tool-use loop, three conditions
+hisaab/runner_langgraph.py  same eval under LangGraph, to rule out loop artefacts
 scenarios/seed.jsonl hand-verified corpus
 scenarios/generated.jsonl machine-composed, verified:false
 SPEC.md              Agent Tool Safety spec, for merchants integrating MCP

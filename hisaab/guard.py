@@ -40,9 +40,6 @@ class Verdict:
     reasons: list = field(default_factory=list)
     at_risk_paise: int = 0
 
-    def __bool__(self):
-        return self.decision == ALLOW
-
 
 @dataclass
 class Session:

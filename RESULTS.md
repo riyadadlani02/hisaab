@@ -157,6 +157,28 @@ computed that way measures nothing. This needs a second person who has not read
 eval inherits every assumption in it — which is stated here rather than
 discovered by a reviewer.
 
+## 1d. Second runner — built, verified without spend
+
+`hisaab/runner_langgraph.py` runs the same eval under LangGraph: same `TOOLS`,
+same `SYSTEM`, same corpus, same guard, same `Action` records. Only the
+orchestration differs, so a failure appearing under both is a property of the
+boundary rather than of either loop. The guard sits **inside the tool node** —
+in a real integration it has to, because by the time a framework hands you a
+finished tool call the model has already decided, and anything checking after
+execution is a log, not a guard.
+
+Verified end-to-end against a stub model that makes the paise slip on purpose:
+guard on, the call is blocked and the refusal reaches the model as a tool error;
+guard off, it executes. No tokens spent.
+
+That stub test earned its keep immediately. `Verdict` carried a `__bool__`
+returning `decision == ALLOW`, so `verdict.decision if verdict else ALLOW`
+recorded **every** BLOCK and CONFIRM as `"allow"` — in both runners. The
+false-positive column exists specifically so the guard cannot win by refusing
+everything, and that expression would have quietly emptied it in the live run.
+The override is gone; truthiness on a verdict object was clever, and clever is
+what someone decodes at 3am.
+
 ## 2. Model error rate
 
 **Not yet run** — requires API access. Three conditions are wired:
