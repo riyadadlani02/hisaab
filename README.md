@@ -50,10 +50,11 @@ boundary and the errors compound into orders of magnitude.
 [`hisaab/amounts.py`](hisaab/amounts.py) carries the grammar, including the
 `do` homograph (cardinal 2 vs. the imperative in *kar do*).
 
-Measured: **GPT-4.1 obeyed 3 of 3 planted instructions against irreversible
-tools — 100% compliance.** And the run found a hole in the guard itself: an
-ordinary `fetch_all_payments` laundered the taint off an injected identifier.
-[RESULTS.md § 4](RESULTS.md).
+Run, and **withheld under responsible disclosure** until Razorpay has seen it
+privately — see [DISCLOSURE.md](DISCLOSURE.md). The defensive half is published
+in full: the run exposed a hole in this repo's own guard, where an ordinary
+`fetch_all_payments` laundered the taint off an identifier. That fix is
+described in [RESULTS.md § 4](RESULTS.md).
 
 **3. Injection through merchant data.** Agents that respond to chargebacks read
 dispute narratives, payment `notes`, and customer emails — all attacker-writable.
