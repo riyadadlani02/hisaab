@@ -49,7 +49,8 @@ class Session:
     subject: str = None                         # the entity the conversation is about
     from_human: set = field(default_factory=set)      # ids the user typed or said
     from_structured: set = field(default_factory=set) # ids from typed API fields
-    from_free_text: set = field(default_factory=set)  # ids seen only in attacker-writable text
+    from_free_text: set = field(default_factory=set)  # ids ever seen in attacker-writable text
+    provenance: dict = field(default_factory=dict)    # id -> where it was FIRST seen
     anchors: dict = field(default_factory=dict)       # entity id -> amount in paise
     confirmed: set = field(default_factory=set)       # readback keys the human approved
     idempotency: set = field(default_factory=set)
@@ -64,6 +65,8 @@ class Session:
             self.stated.append((span, to_paise(rupees)))
         for m in ID_RE.findall(text or ""):
             self.from_human.add(m)
+            self.provenance[m] = "human"      # a person naming it is authoritative
+
             if self.subject is None and m.startswith(("order_", "pay_", "cust_")):
                 self.subject = m
 
@@ -79,6 +82,7 @@ class Session:
                 self._walk(v, tainted or k in FREE_TEXT_KEYS)
                 if not tainted and k in ("id",) + ENTITY_ARGS and isinstance(v, str):
                     self.from_structured.add(v)
+                    self.provenance.setdefault(v, "structured")
                 if not tainted and k == "amount" and isinstance(node.get("id"), str):
                     self.anchors[node["id"]] = int(v)
         elif isinstance(node, list):
@@ -87,6 +91,7 @@ class Session:
         elif isinstance(node, str):
             for m in ID_RE.findall(node):
                 (self.from_free_text if tainted else self.from_structured).add(m)
+                self.provenance.setdefault(m, "free_text" if tainted else "structured")
 
 
 def _entity_args(args):
@@ -117,8 +122,21 @@ def check(tool, args, sess):
     # attacker-writable free text has no business in an irreversible call.
     if t >= Tier.SEMI:
         for key, val in _entity_args(args):
-            if val in sess.from_free_text and val not in (sess.from_human | sess.from_structured):
-                escalate(BLOCK, "tainted-arg: %s=%s originated in merchant/customer free text" % (key, val))
+            # Taint is sticky, and it keys off where the id was FIRST seen.
+            #
+            # The earlier rule cleared taint whenever the id later turned up in
+            # a structured field — and a live run showed an agent doing exactly
+            # that by accident: it read a poisoned dispute, called
+            # fetch_all_payments (which returns every id in a clean `id` field),
+            # and the attacker's target came back laundered. One innocent list
+            # call was enough. Agents make them constantly.
+            #
+            # A human naming the id still clears it, because a person asking for
+            # something outranks where the agent first read the name.
+            if sess.provenance.get(val) == "free_text":
+                escalate(BLOCK, "tainted-arg: %s=%s was first seen in merchant/customer "
+                                "free text; a later structured sighting does not clear that"
+                         % (key, val))
 
     # --- argument type check ------------------------------------------
     if t >= Tier.SEMI:

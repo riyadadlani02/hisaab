@@ -51,6 +51,15 @@ TIERS = {
     "fetch_settlement_with_id": Tier.READ,
     "fetch_settlement_recon_details": Tier.READ,
     "fetch_all_instant_settlements": Tier.READ,
+    # Disputes. Absent from this table they defaulted to TERMINAL — fail-closed
+    # working as designed, but it put readbacks on plain reads and counted them
+    # as injection compliance. Fail-closed protects; it does not excuse an
+    # incomplete table.
+    "fetch_dispute": Tier.READ,
+    "fetch_all_disputes": Tier.READ,
+    "fetch_dispute_evidence": Tier.READ,
+    "contest_dispute": Tier.SEMI,          # submits evidence; withdrawable until final
+    "accept_dispute": Tier.TERMINAL,       # concedes the chargeback, money moves
     "fetch_instant_settlement_with_id": Tier.READ,
 
     # --- REVERSIBLE ---------------------------------------------------

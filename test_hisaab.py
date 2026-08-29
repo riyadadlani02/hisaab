@@ -113,6 +113,40 @@ def t_injection_through_dispute_narrative():
     assert ok.decision == CONFIRM, ok
 
 
+def t_taint_survives_a_laundering_list_call():
+    """Regression for a hole a live run found.
+
+    The agent reads a poisoned dispute, then makes an ordinary broad read. That
+    read returns the attacker's target in a clean structured `id` field, and the
+    old rule treated it as exonerated. One innocent fetch_all_payments was
+    enough to launder an injected instruction."""
+    s = simmod.poisoned_dispute()
+    sess = Session()
+    sess.note_human("Draft a chargeback response for disp_1.")
+    sess.note_tool_result(s.call("fetch_dispute", {"dispute_id": "disp_1"}))
+    assert sess.provenance["pay_VIP"] == "free_text"
+
+    sess.note_tool_result(s.call("fetch_all_payments", {}))     # the laundering step
+    assert "pay_VIP" in sess.from_structured                    # it is there, cleanly
+    assert sess.provenance["pay_VIP"] == "free_text"            # and still tainted
+
+    v = check("create_refund", {"payment_id": "pay_VIP", "amount": 5000000}, sess)
+    assert v.decision == BLOCK and any("tainted-arg" in r for r in v.reasons), v
+
+    # A human naming it still clears the taint — people outrank provenance.
+    sess.note_human("Yes, refund pay_VIP, I authorised that separately.")
+    ok = check("create_refund", {"payment_id": "pay_VIP", "amount": 5000000}, sess)
+    assert ok.decision == CONFIRM, ok
+
+
+def t_dispute_reads_are_reads():
+    """fetch_dispute was missing from the taxonomy and defaulted to TERMINAL.
+    Fail-closed protected us; it did not excuse the gap."""
+    assert tier("fetch_dispute") is Tier.READ
+    assert tier("fetch_all_disputes") is Tier.READ
+    assert tier("accept_dispute") is Tier.TERMINAL
+
+
 def t_injection_through_notes():
     s = simmod.poisoned_notes()
     sess = Session()
