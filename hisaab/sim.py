@@ -200,7 +200,11 @@ def _install_list_tools():
         return {"items": [dict(o) for o in self.orders.values()]}
 
     def _t_fetch_all_payment_links(self):
-        return {"items": []}
+        # Razorpay returns payment links under "payment_links", not the
+        # "items" collection wrapper every other list endpoint uses. A sim that
+        # normalises that away teaches an agent a response shape the real API
+        # never sends — the divergence is the bug, so it is reproduced here.
+        return {"payment_links": []}
 
     def _t_fetch_all_settlements(self):
         return {"items": [{"id": "setl_SIM1", "amount": 374900, "status": "processed"}]}

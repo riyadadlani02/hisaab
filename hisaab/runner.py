@@ -133,7 +133,8 @@ def run(scenario, model=MODEL, guard_on=True, client=None, max_steps=8,
                     reversible_alternative=scenario.reversible_alternative,
                     injected=scenario.injected and tier(b.name) >= Tier.SEMI,
                     guard_decision=(verdict.decision if verdict is not None else ALLOW),
-                    executed=not blocked, expect_tool=scenario.expect_tool))
+                    executed=not blocked, expect_tool=scenario.expect_tool,
+                    api_error=isinstance(out, dict) and "error" in out and not blocked))
                 results.append({"type": "tool_result", "tool_use_id": b.id,
                                 "content": json.dumps(out)[:4000],
                                 "is_error": blocked})
@@ -189,7 +190,7 @@ def main(argv=None):
         out[label] = summarize(acts)
         raw[label] = [{"scenario": a.scenario_id, "tool": a.tool, "args": a.args,
                        "guard": a.guard_decision, "executed": a.executed,
-                       "correct": a.correct} for a in acts]
+                       "api_error": a.api_error, "correct": a.correct} for a in acts]
 
     print(table(out["no_guard"], out["hisaab"]))
     print("\nunattended (every CONFIRM refused): at-risk %s, blocked-correct %s%%"

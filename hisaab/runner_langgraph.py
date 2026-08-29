@@ -70,7 +70,8 @@ def build(llm, call, scenario, actions, turn_no):
                 reversible_alternative=scenario.reversible_alternative,
                 injected=scenario.injected and tier(tc["name"]) >= Tier.SEMI,
                 guard_decision=(verdict.decision if verdict is not None else ALLOW),
-                executed=not blocked, expect_tool=scenario.expect_tool))
+                executed=not blocked, expect_tool=scenario.expect_tool,
+                api_error=isinstance(result, dict) and "error" in result and not blocked))
             out.append(ToolMessage(content=json.dumps(result)[:4000],
                                    tool_call_id=tc["id"], status="error" if blocked else "success"))
         return {"messages": state["messages"] + out}
@@ -146,27 +147,32 @@ def main(argv=None):
         from .rzp_sandbox import RzpSandbox, runnable
         scenarios = runnable(scenarios)
         live = RzpSandbox()                   # raises on a non-test key
+        live.throttle = 1.5                   # Test Mode rate-limits link creation
         backend = lambda: live
         print("sandbox run %s: %d scenarios, links+orders only"
               % (live.run_id, len(scenarios)), file=sys.stderr)
     llm = _model(a.model, a.provider)
     out, raw = {}, {}
-    for label, guard_on, approve in (("no_guard", False, True), ("hisaab", True, True),
-                                     ("hisaab_unattended", True, False)):
-        acts = []
-        for sc in scenarios:
-            acts.extend(run(sc, llm, guard_on=guard_on, approve_confirms=approve,
-                            backend=backend)[0])
-            print("  %-18s %-10s %d calls" % (label, sc.id, len(acts)), file=sys.stderr)
-        out[label] = summarize(acts)
-        raw[label] = [{"scenario": x.scenario_id, "tool": x.tool, "args": x.args,
-                       "guard": x.guard_decision, "executed": x.executed,
-                       "correct": x.correct} for x in acts]
-
-    if backend is not None:
-        cancelled = backend().cleanup()
-        print("cancelled %d payment links created by this run" % len(cancelled),
-              file=sys.stderr)
+    try:
+        for label, guard_on, approve in (("no_guard", False, True), ("hisaab", True, True),
+                                         ("hisaab_unattended", True, False)):
+            acts = []
+            for sc in scenarios:
+                acts.extend(run(sc, llm, guard_on=guard_on, approve_confirms=approve,
+                                backend=backend)[0])
+                print("  %-18s %-10s %d calls" % (label, sc.id, len(acts)), file=sys.stderr)
+            out[label] = summarize(acts)
+            raw[label] = [{"scenario": x.scenario_id, "tool": x.tool, "args": x.args,
+                           "guard": x.guard_decision, "executed": x.executed,
+                       "api_error": x.api_error,
+                           "correct": x.correct} for x in acts]
+    finally:
+        # Cancel in a finally: a crash halfway through must not strand live
+        # objects in someone's account.
+        if backend is not None:
+            cancelled = backend().cleanup()
+            print("cancelled %d payment links created by this run" % len(cancelled),
+                  file=sys.stderr)
 
     print(table(out["no_guard"], out["hisaab"]))
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
