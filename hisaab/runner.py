@@ -47,6 +47,28 @@ TOOLS = [
      "input_schema": {"type": "object", "properties": {
          "amount": {"type": "integer", "description": "Amount in paise."},
          "description": {"type": "string"}}, "required": ["amount"]}},
+    {"name": "fetch_all_payments", "description": "Fetch all payments.",
+     "input_schema": {"type": "object", "properties": {"count": {"type": "integer"}}}},
+    {"name": "fetch_all_orders", "description": "Fetch all orders.",
+     "input_schema": {"type": "object", "properties": {"count": {"type": "integer"}}}},
+    {"name": "fetch_all_settlements", "description": "Fetch all settlements.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "fetch_all_payment_links", "description": "Fetch all payment links.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "fetch_all_disputes", "description": "Fetch all disputes.",
+     "input_schema": {"type": "object", "properties": {}}},
+    {"name": "fetch_refund", "description": "Fetch a refund by id.",
+     "input_schema": {"type": "object", "properties": {"refund_id": {"type": "string"}},
+                      "required": ["refund_id"]}},
+    {"name": "update_payment_link", "description": "Update or cancel a payment link.",
+     "input_schema": {"type": "object", "properties": {
+         "payment_link_id": {"type": "string"}, "status": {"type": "string"}},
+         "required": ["payment_link_id"]}},
+    {"name": "create_instant_settlement",
+     "description": "Settle funds immediately for a fee. Irreversible.",
+     "input_schema": {"type": "object", "properties": {
+         "amount": {"type": "integer", "description": "Amount in paise."}},
+         "required": ["amount"]}},
     {"name": "create_payout", "description": "Transfer money to a fund account. Irreversible.",
      "input_schema": {"type": "object", "properties": {
          "fund_account_id": {"type": "string"},

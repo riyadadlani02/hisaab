@@ -96,18 +96,24 @@ They compose. Run both.
 
 ## Status
 
-**Guard coverage is measured** ([RESULTS.md](RESULTS.md)): across 62 scenarios
-and 504 guard decisions, 406 plausible wrong calls produce **314 blocked, 92
-surfaced at readback, 0 allowed through silently**, with **0% false positives**
-on correct calls that were properly anchored. That audit needs no model — it
-answers "given the model errs, does the guard catch it".
+**Guard coverage is measured** ([RESULTS.md](RESULTS.md)): across 102
+hand-verified scenarios and 686 guard decisions, 554 plausible wrong calls
+produce **433 blocked, 121 surfaced at readback, 0 allowed through silently**,
+with **0% false positives** on correct calls that were properly anchored. That
+audit needs no model — it answers "given the model errs, does the guard catch
+it".
 
 **The model error rate is not yet measured.** No model-in-the-loop run has been
 paid for, so no number for it appears anywhere in this repo.
 
-- 62 hand-verified scenarios (target 250) across 6 families, en / hi / hinglish
+- **102 hand-verified** scenarios across 6 families, en / hi / hinglish
+- **130 machine-composed** Indic scenarios, `verified: false`, audited
+  separately and excluded from every headline number until a human signs off on
+  naturalness (`python -m hisaab.annotate`)
 - 17 scripted checks + the mutation audit, both free of API access
-- the audit found seven defects in the guard; all seven are written up
+- the audit found seven defects in the guard and one in itself; all are written up
+- second-annotator instrument built; **the pass has not been run**, and the
+  author cannot run it — see RESULTS.md § 1c
 
 ## Run it
 
@@ -146,7 +152,10 @@ hisaab/metrics.py    six metrics + the headline unit
 hisaab/scenarios.py  schema, loader, second-opinion verifier
 hisaab/mutations.py  the wrong calls a model plausibly makes
 hisaab/audit.py      guard coverage + false-positive accounting, no model
+hisaab/annotate.py   blind worksheet + inter-annotator agreement
+hisaab/generate.py   attested-shape sweep of the Indic amount space
 hisaab/runner.py     manual tool-use loop, three conditions
-scenarios/seed.jsonl the corpus
+scenarios/seed.jsonl hand-verified corpus
+scenarios/generated.jsonl machine-composed, verified:false
 SPEC.md              Agent Tool Safety spec, for merchants integrating MCP
 ```

@@ -37,8 +37,17 @@ def _prime(scenario, anchored):
                                          {"payment_id": scenario.intended_entity}))
         for d in list(s.disputes):
             sess.note_tool_result(s.call("fetch_dispute", {"dispute_id": d}))
-        if scenario.fixture == "poisoned_notes":
+        # Only what the scenario is about. Reading every payment would make
+        # every entity "bound" and silently destroy the entity-binding signal —
+        # priming that flatters the guard is worse than no priming.
+        if scenario.fixture in ("poisoned_notes", "poisoned_hindi"):
             sess.note_tool_result(s.call("fetch_payment", {"payment_id": "pay_B1"}))
+            sess.note_tool_result(s.call("fetch_payment", {"payment_id": "pay_A1"}))
+        if scenario.fixture == "poisoned_customer_name":
+            sess.note_tool_result(s.call("fetch_payment", {"payment_id": "pay_A1"}))
+            sess.note_tool_result({"items": list(s.customers.values())})
+        if scenario.fixture == "poisoned_receipt":
+            sess.note_tool_result(s.call("fetch_order", {"order_id": "order_B1"}))
     return s, sess
 
 

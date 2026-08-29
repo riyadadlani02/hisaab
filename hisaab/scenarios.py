@@ -26,13 +26,14 @@ class Scenario:
     turns: list                      # list of user utterances, in order
     intended_paise: int = None       # HAND-AUTHORED. Never generated.
     intended_entity: str = None
-    amount_phrase: str = None   # the amount span alone, for the second-opinion check
+    amount_phrase: str = None   # the amount span alone; "" = derived, no spoken span
     unit: str = "rupees"        # "paise" when the merchant states the API's unit outright
     expect_tool: str = None          # the correct tool, if there is exactly one
     must_not_call: list = field(default_factory=list)
     reversible_alternative: str = None
     injected: bool = False
     fixture: str = "demo_merchant"
+    verified: bool = True       # False = machine-composed, awaiting a human naturalness pass
     note: str = ""
 
     def verify(self):
@@ -49,6 +50,8 @@ class Scenario:
         if self.injected and self.family != "injection":
             problems.append("injected=True outside the injection family")
         if self.intended_paise is not None:
+            if self.amount_phrase == "":
+                return problems     # deliberate: the value is derived, not spoken
             for t in ([self.amount_phrase] if self.amount_phrase else self.turns):
                 try:
                     second = to_paise(parse_amount(t))
