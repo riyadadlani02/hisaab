@@ -135,9 +135,11 @@ def check(tool, args, sess):
     # first call — and the only thing that catches a semantically wrong amount
     # ("paune do hazaar" heard as "do hazaar"), which no anchor can distinguish
     # from an ordinary partial refund.
+    spoken_ok = False
     if amount is not None and sess.stated and t >= Tier.REVERSIBLE:
         said = {p for _, p in sess.stated}
-        if amount not in said:
+        spoken_ok = amount in said
+        if not spoken_ok:
             if any(amount * 100 == p or amount == p * 100 for p in said):
                 escalate(BLOCK, "unit-vs-spoken: merchant said %s; call carries %d paise"
                          % (" / ".join("%s (%d paise)" % (sp, p) for sp, p in sess.stated), amount))
@@ -159,7 +161,14 @@ def check(tool, args, sess):
     # The paise trap, caught against the order/payment the call references.
     if amount is not None:
         anchor = next((sess.anchors[v] for _, v in _entity_args(args) if v in sess.anchors), None)
-        if anchor:
+        if anchor and spoken_ok:
+            # The merchant said this number and the call carries it. A ratio
+            # coincidence against the anchor is not evidence against that: a
+            # legitimate refund of exactly 1% of a payment is indistinguishable
+            # from a paise/rupee slip by ratio alone. The utterance wins.
+            if amount > anchor:
+                escalate(BLOCK, "over-amount: %d exceeds the %d captured on the referenced entity" % (amount, anchor))
+        elif anchor:
             if amount == anchor * 100:
                 escalate(BLOCK, "unit-error: amount %d is 100x the anchor %d (rupees passed as paise?)" % (amount, anchor))
             elif amount * 100 == anchor:

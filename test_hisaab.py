@@ -5,7 +5,10 @@ without paying a model to reproduce them. Model-in-the-loop numbers come from
 `python -m hisaab.runner`.
 """
 
-from hisaab.amounts import parse_amount, to_paise, magnitude_bucket
+from decimal import Decimal
+
+from hisaab.amounts import (parse_amount, to_paise, magnitude_bucket,
+                            extract_amounts)
 from hisaab.taxonomy import tier, Tier
 from hisaab.guard import Session, check, wrap, readback, ALLOW, CONFIRM, BLOCK
 from hisaab.metrics import Action, summarize, table
@@ -27,6 +30,10 @@ def t_amounts():
     for text, want in cases.items():
         got = parse_amount(text)
         assert got == want, "%r -> %s, want %s" % (text, got, want)
+    assert parse_amount("99.50") == Decimal("99.50")
+    # Sentence-final punctuation must not swallow the decimal.
+    assert extract_amounts("Create a link for 99.50.") == [("99.50", Decimal("99.50"))]
+    assert extract_amounts("Refund 1250 paise on pay_B1.") == [("refund 1250", Decimal("12.5"))]
     assert to_paise(2499) == 249900
     assert to_paise("0.5") == 50
     assert magnitude_bucket(24990000, 249900) == "x100"
@@ -152,6 +159,21 @@ def t_semantic_amount_error_is_surfaced_not_blocked():
     assert [p for _, p in sess.stated] == [175000], sess.stated   # not 175200: "kar do"
     v = check("create_refund", {"payment_id": "pay_A1", "amount": 200000}, sess)
     assert v.decision == CONFIRM and any("amount-mismatch" in r for r in v.reasons), v
+
+
+def t_spoken_amount_beats_a_ratio_coincidence():
+    """A refund of exactly 1% of a payment trips the anchor's divide-by-100
+    heuristic. When the merchant said the number out loud, the utterance is the
+    better evidence and the heuristic stands down."""
+    s = simmod.demo_merchant()
+    sess = Session()
+    sess.note_human("Refund 1250 paise on pay_B1.")            # Rs 12.50
+    sess.note_tool_result(s.call("fetch_payment", {"payment_id": "pay_B1"}))
+    assert [p for _, p in sess.stated] == [1250], sess.stated
+    v = check("create_refund", {"payment_id": "pay_B1", "amount": 1250}, sess)
+    assert v.decision == CONFIRM, v            # readback only, not blocked
+    over = check("create_refund", {"payment_id": "pay_B1", "amount": 999999}, sess)
+    assert over.decision == BLOCK, over        # over-amount still applies
 
 
 def t_wrong_object_type():

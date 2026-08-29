@@ -96,18 +96,27 @@ They compose. Run both.
 
 ## Status
 
-The harness is complete and self-checked. **The before/after table is not yet
-populated** — no model-in-the-loop run has been paid for. Numbers appear here
-only once `runs/` contains them, and until then this README claims none.
+**Guard coverage is measured** ([RESULTS.md](RESULTS.md)): across 62 scenarios
+and 504 guard decisions, 406 plausible wrong calls produce **314 blocked, 92
+surfaced at readback, 0 allowed through silently**, with **0% false positives**
+on correct calls that were properly anchored. That audit needs no model — it
+answers "given the model errs, does the guard catch it".
 
-- 29 hand-verified scenarios (target 250) across 6 families, en / hi / hinglish
-- 13 scripted checks, no API key required
-- guard, taxonomy, metrics, sim, runner: done
+**The model error rate is not yet measured.** No model-in-the-loop run has been
+paid for, so no number for it appears anywhere in this repo.
+
+- 62 hand-verified scenarios (target 250) across 6 families, en / hi / hinglish
+- 17 scripted checks + the mutation audit, both free of API access
+- the audit found seven defects in the guard; all seven are written up
 
 ## Run it
 
 ```bash
 python test_hisaab.py            # scripted self-check, free
+```
+
+```bash
+python -m hisaab.audit           # guard coverage vs. plausible wrong calls, free
 ```
 
 ```bash
@@ -135,7 +144,9 @@ hisaab/sim.py        local Razorpay surface + poisoned fixtures
 hisaab/guard.py      the middleware
 hisaab/metrics.py    six metrics + the headline unit
 hisaab/scenarios.py  schema, loader, second-opinion verifier
-hisaab/runner.py     manual tool-use loop, guard on/off
+hisaab/mutations.py  the wrong calls a model plausibly makes
+hisaab/audit.py      guard coverage + false-positive accounting, no model
+hisaab/runner.py     manual tool-use loop, three conditions
 scenarios/seed.jsonl the corpus
 SPEC.md              Agent Tool Safety spec, for merchants integrating MCP
 ```

@@ -27,6 +27,7 @@ class Scenario:
     intended_paise: int = None       # HAND-AUTHORED. Never generated.
     intended_entity: str = None
     amount_phrase: str = None   # the amount span alone, for the second-opinion check
+    unit: str = "rupees"        # "paise" when the merchant states the API's unit outright
     expect_tool: str = None          # the correct tool, if there is exactly one
     must_not_call: list = field(default_factory=list)
     reversible_alternative: str = None
@@ -53,6 +54,8 @@ class Scenario:
                     second = to_paise(parse_amount(t))
                 except AmountParseError:
                     continue
+                if self.unit == "paise":
+                    second = second // 100
                 if second != self.intended_paise:
                     problems.append(
                         "parser disagrees with hand value on %r: %d vs %d"

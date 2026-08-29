@@ -93,7 +93,10 @@ def _tokenize(text):
     text = text.lower().replace("₹", " rs ").replace(",", "")
     # split "5k" / "2.5l" / "10cr" into number + scale
     text = re.sub(r"(\d)\s*(k|l|cr|lakh|lakhs|lac|crore|crores|hazaar|sau)\b", r"\1 \2", text)
-    toks = [t for t in re.split(r"[^a-z0-9.]+", text) if t]
+    # Sentence-final punctuation attaches to a decimal: "99.50." is one token
+    # and matches nothing. Strip trailing dots, keep internal ones.
+    toks = [t.rstrip(".") for t in re.split(r"[^a-z0-9.]+", text)]
+    toks = [t for t in toks if t]
     return [t for i, t in enumerate(toks)
             if not (t == "do" and i and toks[i - 1] in IMPERATIVE_STEMS)]
 
@@ -186,6 +189,10 @@ def extract_amounts(text):
     Returns [(span, rupees)] for maximal parseable spans. A span must carry a
     scale word, a digit, or a fractional term to count: that requirement is
     what stops the `do` homograph in "kar do" from being read as Rs 2.
+
+    A merchant who says "paise" means paise. Missing that turns the guard's
+    strongest check into a false positive on the one utterance that was
+    already in the API's unit.
     """
     # Strip typed identifiers first: `disp_1` tokenizes to `disp` + `1`, and a
     # bare 1 out of a dispute id is not an amount.
@@ -205,6 +212,8 @@ def extract_amounts(text):
                 continue
         if best:
             span = best[0].split()
+            if any(t in ("paise", "paisa") for t in span):
+                best = (best[0], best[1] / Decimal(100), best[2])
             while span and span[-1] in NOISE:      # trim trailing filler
                 span.pop()
             found.append((" ".join(span), best[1]))
