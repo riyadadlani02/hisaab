@@ -28,7 +28,19 @@ from .scenarios import load
 from .taxonomy import Tier, tier
 
 
-def _model(model=MODEL):
+# The eval's claim is about the boundary, not about one vendor. A second
+# provider is the cleanest way to show that: if the same paise and Indic
+# failures appear on both, they are a property of the interface between natural
+# language and an API that counts in paise, not a quirk of one model family.
+PROVIDERS = {"anthropic": MODEL, "openai": "gpt-4.1"}
+
+
+def _model(model=None, provider="anthropic"):
+    model = model or PROVIDERS[provider]
+    if provider == "openai":
+        from langchain_openai import ChatOpenAI
+        return ChatOpenAI(model=model, max_tokens=4096,
+                          temperature=0).bind_tools(TOOLS)
     from langchain_anthropic import ChatAnthropic
     ws = os.environ.get("ANTHROPIC_WORKSPACE_ID")
     return ChatAnthropic(
@@ -119,7 +131,8 @@ def main(argv=None):
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser(prog="hisaab.runner_langgraph")
     ap.add_argument("--scenarios", default=os.path.join(root, "scenarios", "seed.jsonl"))
-    ap.add_argument("--model", default=MODEL)
+    ap.add_argument("--provider", choices=sorted(PROVIDERS), default="anthropic")
+    ap.add_argument("--model", default=None, help="override the provider default")
     ap.add_argument("--family")
     ap.add_argument("--out", default="runs/langgraph.json")
     ap.add_argument("--backend", choices=("sim", "sandbox"), default="sim",
@@ -136,7 +149,7 @@ def main(argv=None):
         backend = lambda: live
         print("sandbox run %s: %d scenarios, links+orders only"
               % (live.run_id, len(scenarios)), file=sys.stderr)
-    llm = _model(a.model)
+    llm = _model(a.model, a.provider)
     out, raw = {}, {}
     for label, guard_on, approve in (("no_guard", False, True), ("hisaab", True, True),
                                      ("hisaab_unattended", True, False)):
@@ -158,7 +171,8 @@ def main(argv=None):
     print(table(out["no_guard"], out["hisaab"]))
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)
     with open(a.out, "w") as f:
-        json.dump({"runner": "langgraph", "model": a.model,
+        json.dump({"runner": "langgraph", "provider": a.provider,
+                   "model": a.model or PROVIDERS[a.provider],
                    "n_scenarios": len(scenarios), "summary": out, "actions": raw},
                   f, indent=2)
     print("wrote %s" % a.out)

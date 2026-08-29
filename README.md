@@ -38,6 +38,10 @@ accepted, including all four 100×-under slips**, with no warning and no
 difference in the response. A link meant for ₹1,25,000 was created for ₹1,250.
 [RESULTS.md § 1e](RESULTS.md).
 
+Measured: **GPT-4.1 got 8 of 26 Indic amounts right. 46% were wrong by ≥ 10×,
+and 8 by exactly 100×.** The guard blocked every one of the 100× errors and
+surfaced the rest at readback. [RESULTS.md § 2](RESULTS.md).
+
 **2. Indic amount expressions.** Hindi builds amounts with quarter-steps that
 have no English equivalent — `sava` (+¼), `paune` (−¼), `saade` (+½), and the
 standalone `dedh` (1.5), `dhai` (2.5), `adha` (0.5). *sava lakh* is 125,000.
