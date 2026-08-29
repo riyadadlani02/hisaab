@@ -212,7 +212,7 @@ whitelist with no code path to a refund, a payout, or a settlement; a key not
 starting with `rzp_test_` raises before any request is sent. Test Mode has no
 captured payments unless one is pushed through Checkout, so the refund half of
 the corpus cannot run here at all and stays on the simulator. See
-[DISCLOSURE.md](DISCLOSURE.md).
+the disclosure policy in the README.
 
 ## 4. Full corpus — 102 scenarios, GPT-4.1
 
@@ -237,8 +237,7 @@ repo opens with.
 **Held under responsible disclosure.** The injection family was run and produced
 a clear result against irreversible tools. It is not published here, and will
 not be until named contacts at Razorpay have seen it privately and a window has
-been agreed. See [DISCLOSURE.md](DISCLOSURE.md); the draft notification is in
-[DISCLOSURE_EMAIL.md](DISCLOSURE_EMAIL.md), unsent.
+been agreed.
 
 Nothing was tested against any Razorpay-operated surface. The sandbox backend
 cannot express a refund or a payout by construction, and the injection family is

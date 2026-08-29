@@ -6,3 +6,8 @@
 .venv/
 __pycache__/
 runs/
+
+# Internal working documents — never published.
+DISCLOSURE.md
+DISCLOSURE_EMAIL.md
+PLAN.md
