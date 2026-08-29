@@ -1,5 +1,8 @@
-__pycache__/
+
+# Run outputs carry full action logs, including the withheld family.
+# The site cites the numbers; the runs are reproducible from the corpus.
 *.pyc
-.venv/
-runs/
 .env
+.venv/
+__pycache__/
+runs/
