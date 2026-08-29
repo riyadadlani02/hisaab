@@ -64,11 +64,19 @@ def _client():
     return anthropic.Anthropic()
 
 
-def run(scenario, model=MODEL, guard_on=True, client=None, max_steps=8):
-    """Returns (actions, transcript). One scenario, one session."""
+def run(scenario, model=MODEL, guard_on=True, client=None, max_steps=8,
+        approve_confirms=True):
+    """Returns (actions, transcript). One scenario, one session.
+
+    `approve_confirms` is the human. True simulates an attentive operator who
+    approves whatever readback they are shown — which isolates what the guard's
+    BLOCK rules are worth semantically. False is the unattended ceiling, where
+    nothing irreversible executes at all; that condition wins every metric here
+    trivially, so it is reported beside the other two, never instead of them."""
     s = getattr(simmod, scenario.fixture)()
     sess = Session()
-    call = wrap(s, sess) if guard_on else (lambda t, a: (s.call(t, a), None))
+    call = (wrap(s, sess, on_confirm=lambda v, t, a: approve_confirms)
+            if guard_on else (lambda t, a: (s.call(t, a), None)))
     client = client or _client()
 
     messages = []
@@ -98,13 +106,13 @@ def run(scenario, model=MODEL, guard_on=True, client=None, max_steps=8):
                     reversible_alternative=scenario.reversible_alternative,
                     injected=scenario.injected and tier(b.name) >= Tier.SEMI,
                     guard_decision=(verdict.decision if verdict else ALLOW),
-                    executed=not blocked))
+                    executed=not blocked, expect_tool=scenario.expect_tool))
                 results.append({"type": "tool_result", "tool_use_id": b.id,
                                 "content": json.dumps(out)[:4000],
                                 "is_error": blocked})
+                if not guard_on:
+                    sess.note_tool_result(out)
             messages.append({"role": "user", "content": results})
-            if not guard_on:
-                sess.note_tool_result(out)
     return actions, messages
 
 
@@ -115,25 +123,41 @@ def main(argv=None):
     ap.add_argument("--model", default=MODEL)
     ap.add_argument("--family", help="run only one family")
     ap.add_argument("--out", default="runs/latest.json")
+    ap.add_argument("--seeds", type=int, default=1, help="repeats per scenario")
     args = ap.parse_args(argv)
 
     scenarios = [s for s in load(args.scenarios)
                  if not args.family or s.family == args.family]
     client = _client()
-    both = {}
-    for label, guard_on in (("no_guard", False), ("hisaab", True)):
+    conditions = (("no_guard", False, True),
+                  ("hisaab", True, True),            # guard on, human approves readbacks
+                  ("hisaab_unattended", True, False))
+    out = {}
+    raw = {}
+    for label, guard_on, approve in conditions:
         acts = []
-        for sc in scenarios:
-            a, _ = run(sc, model=args.model, guard_on=guard_on, client=client)
-            acts.extend(a)
-            print("  %-10s %-10s %d calls" % (label, sc.id, len(a)), file=sys.stderr)
-        both[label] = summarize(acts)
+        for seed in range(args.seeds):
+            for sc in scenarios:
+                a, _ = run(sc, model=args.model, guard_on=guard_on, client=client,
+                           approve_confirms=approve)
+                acts.extend(a)
+                print("  %-18s %-10s seed%d  %d calls" % (label, sc.id, seed, len(a)),
+                      file=sys.stderr)
+        out[label] = summarize(acts)
+        raw[label] = [{"scenario": a.scenario_id, "tool": a.tool, "args": a.args,
+                       "guard": a.guard_decision, "executed": a.executed,
+                       "correct": a.correct} for a in acts]
 
-    print(table(both["no_guard"], both["hisaab"]))
+    print(table(out["no_guard"], out["hisaab"]))
+    print("\nunattended (every CONFIRM refused): at-risk %s, blocked-correct %s%%"
+          % (out["hisaab_unattended"]["rupees_at_risk_per_1000_actions"],
+             out["hisaab_unattended"]["blocked_correct_pct"]))
     os.makedirs(os.path.dirname(args.out) or ".", exist_ok=True)
     with open(args.out, "w") as f:
-        json.dump({"model": args.model, "n_scenarios": len(scenarios), **both}, f, indent=2)
-    print("\nwrote %s" % args.out)
+        json.dump({"model": args.model, "seeds": args.seeds,
+                   "n_scenarios": len(scenarios),
+                   "thinking": "adaptive", "summary": out, "actions": raw}, f, indent=2)
+    print("wrote %s" % args.out)
 
 
 if __name__ == "__main__":

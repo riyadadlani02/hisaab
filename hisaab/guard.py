@@ -19,12 +19,19 @@ and the other expires on its own.
 from dataclasses import dataclass, field
 import re
 
+from .amounts import extract_amounts, to_paise
 from .taxonomy import (tier, Tier, AMOUNT_ARGS, ENTITY_ARGS, FREE_TEXT_KEYS)
 
 ALLOW, CONFIRM, BLOCK = "allow", "confirm", "block"
 
 # Razorpay identifiers are typed prefixes. Provenance tracking keys off them.
 ID_RE = re.compile(r"\b((?:pay|order|cust|rfnd|plink|pout|disp|fa|qr)_[A-Za-z0-9]+)\b")
+
+# Razorpay ids are typed by prefix. An order id in a payment_id field is not a
+# lookup failure, it is the agent reaching for the wrong object entirely — and
+# it is what "just refund this order" produces when no read happened first.
+ID_PREFIX = {"payment_id": "pay_", "order_id": "order_", "customer_id": "cust_",
+             "refund_id": "rfnd_", "fund_account_id": "fa_", "settlement_id": "setl_"}
 
 
 @dataclass
@@ -49,9 +56,15 @@ class Session:
     anchors: dict = field(default_factory=dict)       # entity id -> amount in paise
     confirmed: set = field(default_factory=set)       # readback keys the human approved
     idempotency: set = field(default_factory=set)
+    stated: list = field(default_factory=list)        # (span, paise) the human actually said
 
     # ---- provenance intake ------------------------------------------
     def note_human(self, text):
+        # The merchant's own words are the only ground truth available at
+        # runtime for what the amount was supposed to be. A prior read anchors
+        # the *ceiling*; only the utterance anchors the intent.
+        for span, rupees in extract_amounts(text or ""):
+            self.stated.append((span, to_paise(rupees)))
         for m in ID_RE.findall(text or ""):
             self.from_human.add(m)
             if self.subject is None and m.startswith(("order_", "pay_", "cust_")):
@@ -110,9 +123,34 @@ def check(tool, args, sess):
             if val in sess.from_free_text and val not in (sess.from_human | sess.from_structured):
                 escalate(BLOCK, "tainted-arg: %s=%s originated in merchant/customer free text" % (key, val))
 
+    # --- argument type check ------------------------------------------
+    if t >= Tier.SEMI:
+        for key, val in _entity_args(args):
+            want = ID_PREFIX.get(key)
+            if want and not val.startswith(want):
+                escalate(BLOCK, "wrong-object-type: %s=%s is not a %s id" % (key, val, want))
+
+    # --- spoken-amount check ------------------------------------------
+    # Needs no prior read, so it is the only unit check that works on the very
+    # first call — and the only thing that catches a semantically wrong amount
+    # ("paune do hazaar" heard as "do hazaar"), which no anchor can distinguish
+    # from an ordinary partial refund.
+    if amount is not None and sess.stated and t >= Tier.REVERSIBLE:
+        said = {p for _, p in sess.stated}
+        if amount not in said:
+            if any(amount * 100 == p or amount == p * 100 for p in said):
+                escalate(BLOCK, "unit-vs-spoken: merchant said %s; call carries %d paise"
+                         % (" / ".join("%s (%d paise)" % (sp, p) for sp, p in sess.stated), amount))
+            else:
+                escalate(CONFIRM, "amount-mismatch: merchant said %s; call carries %d paise"
+                         % (" / ".join("%s (%d paise)" % (sp, p) for sp, p in sess.stated), amount))
+
     # --- entity binding ----------------------------------------------
     # Right action, wrong person. The failure nobody's success rate measures.
-    if t >= Tier.SEMI and sess.subject:
+    # Deliberately not gated on a subject having been identified: an agent
+    # handed a task with no named entity is exactly the case where an
+    # unexplained id is most suspicious.
+    if t >= Tier.SEMI:
         for key, val in _entity_args(args):
             if val not in sess.from_human and val not in sess.from_structured:
                 escalate(BLOCK, "unbound-entity: %s=%s never appeared in this conversation" % (key, val))

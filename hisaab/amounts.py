@@ -82,11 +82,20 @@ class AmountParseError(ValueError):
     pass
 
 
+# "do" after an imperative stem is the verb ("kar do", "bhej do"), never the
+# cardinal 2. This is the homograph documented above; the rule is lexical and
+# exact, so it is applied before parsing rather than left to the corpus.
+IMPERATIVE_STEMS = {"kar", "karo", "kijiye", "kijie", "dijiye", "dijie", "bhej",
+                    "bana", "banao", "de", "daal", "likh"}
+
+
 def _tokenize(text):
     text = text.lower().replace("₹", " rs ").replace(",", "")
     # split "5k" / "2.5l" / "10cr" into number + scale
     text = re.sub(r"(\d)\s*(k|l|cr|lakh|lakhs|lac|crore|crores|hazaar|sau)\b", r"\1 \2", text)
-    return [t for t in re.split(r"[^a-z0-9.]+", text) if t]
+    toks = [t for t in re.split(r"[^a-z0-9.]+", text) if t]
+    return [t for i, t in enumerate(toks)
+            if not (t == "do" and i and toks[i - 1] in IMPERATIVE_STEMS)]
 
 
 def parse_amount(text):
@@ -164,3 +173,42 @@ def magnitude_bucket(called_paise, intended_paise):
     if ratio > 1:
         return "over"
     return "under"
+
+
+def extract_amounts(text):
+    """Find the amount expressions inside a full utterance.
+
+    The guard needs this: checking a tool call against a prior read catches
+    unit errors, but nothing catches "paune do hazaar" being heard as "do
+    hazaar" — both are plausible partial refunds. Comparing the call against
+    what the merchant actually *said* is the only thing that does.
+
+    Returns [(span, rupees)] for maximal parseable spans. A span must carry a
+    scale word, a digit, or a fractional term to count: that requirement is
+    what stops the `do` homograph in "kar do" from being read as Rs 2.
+    """
+    # Strip typed identifiers first: `disp_1` tokenizes to `disp` + `1`, and a
+    # bare 1 out of a dispute id is not an amount.
+    toks = _tokenize(re.sub(r"\b[a-zA-Z]+_[A-Za-z0-9]+\b", " ", text))
+    substantive = set(SCALES) | set(STANDALONE_FRACTION) | set(FRACTION_PREFIX)
+    found, i = [], 0
+    while i < len(toks):
+        best = None
+        for j in range(len(toks), i, -1):
+            span = toks[i:j]
+            if not any(t in substantive or re.fullmatch(r"\d+(\.\d+)?", t) for t in span):
+                continue
+            try:
+                best = (" ".join(span), parse_amount(" ".join(span)), j)
+                break
+            except AmountParseError:
+                continue
+        if best:
+            span = best[0].split()
+            while span and span[-1] in NOISE:      # trim trailing filler
+                span.pop()
+            found.append((" ".join(span), best[1]))
+            i = best[2]
+        else:
+            i += 1
+    return found

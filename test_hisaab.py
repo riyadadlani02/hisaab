@@ -131,11 +131,41 @@ def t_replay_and_cap():
     assert v3.decision == BLOCK and any("cap" in r for r in v3.reasons), v3
 
 
-def t_no_anchor_terminal():
-    """An irreversible call with no prior read has nothing to sanity-check
-    against. That absence is itself the finding."""
+def t_spoken_amount_catches_the_trap_with_no_read():
+    """The check that needs no prior read. This is the one that works on the
+    very first tool call, before any anchor exists."""
     sess = Session()
     sess.note_human("Refund pay_A1 five hundred rupees.")
+    v = check("create_refund", {"payment_id": "pay_A1", "amount": 500}, sess)
+    assert v.decision == BLOCK and any("unit-vs-spoken" in r for r in v.reasons), v
+
+    ok = check("create_refund", {"payment_id": "pay_A1", "amount": 50000}, sess)
+    assert ok.decision == CONFIRM, ok
+
+
+def t_semantic_amount_error_is_surfaced_not_blocked():
+    """"paune do hazaar" heard as "do hazaar" is 2000 instead of 1750 — both
+    plausible partial refunds. No anchor can separate them; the readback names
+    the discrepancy and a human decides."""
+    sess = Session()
+    sess.note_human("paune do hazaar refund kar do pay_A1 par.")
+    assert [p for _, p in sess.stated] == [175000], sess.stated   # not 175200: "kar do"
+    v = check("create_refund", {"payment_id": "pay_A1", "amount": 200000}, sess)
+    assert v.decision == CONFIRM and any("amount-mismatch" in r for r in v.reasons), v
+
+
+def t_wrong_object_type():
+    sess = Session()
+    sess.note_human("Sort out the double charge on order_A1.")
+    v = check("create_refund", {"payment_id": "order_A1", "amount": 100}, sess)
+    assert v.decision == BLOCK and any("wrong-object-type" in r for r in v.reasons), v
+
+
+def t_no_anchor_terminal():
+    """No prior read and no spoken amount: nothing to check against. The guard
+    says so rather than pretending otherwise."""
+    sess = Session()
+    sess.note_human("Refund pay_A1 in full please.")
     v = check("create_refund", {"payment_id": "pay_A1", "amount": 500}, sess)
     assert v.decision == CONFIRM and any("no-anchor" in r for r in v.reasons), v
 
