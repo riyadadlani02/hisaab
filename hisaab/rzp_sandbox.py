@@ -77,7 +77,13 @@ class RzpSandbox:
         self.refunds = {}
 
     # ---- transport ---------------------------------------------------
+    # Test Mode rate-limits hard. A 429 in the middle of a probe reads as
+    # "the API rejected it", which is the opposite of the finding — so pace it.
+    throttle = 0.0
+
     def _request(self, method, path, body=None):
+        if self.throttle:
+            time.sleep(self.throttle)
         if self.dry_run:
             return {"_dry_run": True, "method": method, "path": path, "body": body}
         token = base64.b64encode(
@@ -87,14 +93,23 @@ class RzpSandbox:
             API + path, data=data, method=method,
             headers={"Authorization": "Basic " + token,
                      "Content-Type": "application/json"})
-        try:
-            with urllib.request.urlopen(req, timeout=30) as r:
-                return json.loads(r.read().decode())
-        except urllib.error.HTTPError as e:
-            return {"error": json.loads(e.read().decode() or "{}").get(
-                "error", {"description": str(e)})}
-        except urllib.error.URLError as e:
-            return {"error": {"code": "NETWORK", "description": str(e)}}
+        # Retry only 429/5xx. A 400 is the API telling us something true about
+        # the request, and retrying it would turn a real answer into noise.
+        delay = 5.0
+        for attempt in range(5):
+            try:
+                with urllib.request.urlopen(req, timeout=30) as r:
+                    return json.loads(r.read().decode())
+            except urllib.error.HTTPError as e:
+                err = json.loads(e.read().decode() or "{}").get(
+                    "error", {"description": str(e)})
+                if e.code in (429, 500, 502, 503, 504) and attempt < 4:
+                    time.sleep(delay)
+                    delay *= 2
+                    continue
+                return {"error": err}
+            except urllib.error.URLError as e:
+                return {"error": {"code": "NETWORK", "description": str(e)}}
 
     # ---- the Sim interface -------------------------------------------
     def call(self, tool, args):
@@ -149,3 +164,67 @@ def runnable(scenarios):
             if s.family in RUNNABLE_FAMILIES
             and s.expect_tool in ALLOWED
             and not s.injected]
+
+
+# --- boundary probe ---------------------------------------------------------
+# Evidence that needs no model: does the real endpoint accept the wrong number?
+# The eval measures how often an agent produces it. This measures what happens
+# when it does — and the answer decides whether any of this matters.
+
+PROBE = [
+    ("sava sau",         12500),      # Rs 125
+    ("paune do hazaar",  175000),     # Rs 1,750
+    ("dhai hazaar",      250000),     # Rs 2,500
+    ("sava lakh",        12500000),   # Rs 1,25,000
+]
+
+
+def _rs(paise):
+    return "Rs %s" % format(paise / 100.0, ",.2f")
+
+
+def probe(sandbox):
+    """Create the correct link and the rupees-as-paise slip for each phrase.
+    Report what Razorpay actually did with both."""
+    rows = []
+    for phrase, correct in PROBE:
+        for label, amount in (("correct", correct), ("slip", correct // 100)):
+            out = sandbox.call("create_payment_link", {
+                "amount": amount,
+                "description": "hisaab boundary probe: %s (%s)" % (phrase, label)})
+            err = out.get("error") if isinstance(out, dict) else None
+            rows.append({"phrase": phrase, "case": label, "sent": amount,
+                         "accepted": not err,
+                         "created_amount": (out or {}).get("amount"),
+                         "reads_as": _rs(out["amount"]) if not err and out.get("amount") else None,
+                         "error": (err or {}).get("description")})
+    return rows
+
+
+def _probe_main():
+    s = RzpSandbox()
+    s.throttle = 2.5
+    print("Razorpay Test Mode, run %s\n" % s.run_id)
+    rows = probe(s)
+    print("%-18s %-8s %12s  %-9s %14s  %s"
+          % ("phrase", "case", "amount sent", "accepted", "reads as", "vs intended"))
+    print("-" * 88)
+    for r in rows:
+        intended = dict(PROBE)[r["phrase"]]
+        delta = ("--" if r["case"] == "correct"
+                 else "%.0fx under" % (intended / r["sent"]) if r["sent"] else "")
+        print("%-18s %-8s %12d  %-9s %14s  %s"
+              % (r["phrase"], r["case"], r["sent"],
+                 "YES" if r["accepted"] else "no",
+                 r["reads_as"] or (r["error"] or "")[:14], delta))
+    done = s.cleanup()
+    print("\ncancelled %d links" % len(done))
+    return rows
+
+
+if __name__ == "__main__":
+    import sys
+    sys.path.insert(0, os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
+    from hisaab.runner import _load_env
+    _load_env()
+    _probe_main()

@@ -33,6 +33,11 @@ what an agent may do unsupervised — see [`hisaab/taxonomy.py`](hisaab/taxonomy
 is ₹500. An LLM writing tool calls from natural language crosses that boundary
 on every call, and every error is off by exactly 100×.
 
+Measured against Razorpay **Test Mode**, not a simulator: **8 of 8 amounts
+accepted, including all four 100×-under slips**, with no warning and no
+difference in the response. A link meant for ₹1,25,000 was created for ₹1,250.
+[RESULTS.md § 1e](RESULTS.md).
+
 **2. Indic amount expressions.** Hindi builds amounts with quarter-steps that
 have no English equivalent — `sava` (+¼), `paune` (−¼), `saade` (+½), and the
 standalone `dedh` (1.5), `dhai` (2.5), `adha` (0.5). *sava lakh* is 125,000.

@@ -6,6 +6,7 @@ be confused with each other.
 | | question | needs a model? | status |
 |---|---|---|---|
 | **Guard coverage** | *given* the model errs, does the guard catch it? | no | **below** |
+| **Blast radius** | does the real API stop a wrong amount? | no | **§ 1e — it does not** |
 | **Model error rate** | how often does the model err? | yes | not yet run |
 
 ---
@@ -178,6 +179,40 @@ false-positive column exists specifically so the guard cannot win by refusing
 everything, and that expression would have quietly emptied it in the live run.
 The override is gone; truthiness on a verdict object was clever, and clever is
 what someone decodes at 3am.
+
+## 1e. The paise boundary against the real endpoint
+
+Razorpay **Test Mode**, `python -m hisaab.rzp_sandbox`, run `hisaab-1788004996`.
+For each phrase: the correct paise value, and the rupees-as-paise slip an agent
+produces when it forgets the unit. Both sent to the live `POST /v1/payment_links`.
+
+| phrase | intended | sent | accepted | link created for |
+|---|---|---|---|---|
+| *sava sau* | ₹125 | 12500 | yes | ₹125.00 |
+| *sava sau* **slip** | ₹125 | 125 | **yes** | **₹1.25** |
+| *paune do hazaar* | ₹1,750 | 175000 | yes | ₹1,750.00 |
+| *paune do hazaar* **slip** | ₹1,750 | 1750 | **yes** | **₹17.50** |
+| *dhai hazaar* | ₹2,500 | 250000 | yes | ₹2,500.00 |
+| *dhai hazaar* **slip** | ₹2,500 | 2500 | **yes** | **₹25.00** |
+| *sava lakh* | ₹1,25,000 | 12500000 | yes | ₹1,25,000.00 |
+| *sava lakh* **slip** | ₹1,25,000 | 125000 | **yes** | **₹1,250.00** |
+
+**8 of 8 accepted. No warning, no validation error, no difference in the
+response between the right number and the one that is off by a hundred.** Every
+link was cancelled by the run's own cleanup.
+
+This is the answer to the obvious objection — that a simulator encodes the bug
+it claims to find. It does not. The boundary is real, the endpoint is
+indifferent to it, and nothing between the model and the ledger notices. That is
+the whole case for a guard that checks the amount against what the merchant
+actually said.
+
+Scope, deliberately narrow: payment links and orders only, through a seven-tool
+whitelist with no code path to a refund, a payout, or a settlement; a key not
+starting with `rzp_test_` raises before any request is sent. Test Mode has no
+captured payments unless one is pushed through Checkout, so the refund half of
+the corpus cannot run here at all and stays on the simulator. See
+[DISCLOSURE.md](DISCLOSURE.md).
 
 ## 2. Model error rate
 
