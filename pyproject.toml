@@ -1,0 +1,11 @@
+[project]
+name = "hisaab"
+version = "0.1.0"
+description = "Semantic safety layer and eval for LLM agents holding irreversible payment tools"
+requires-python = ">=3.9"
+dependencies = []
+
+[project.optional-dependencies]
+# Only the runner needs a model. Everything else — taxonomy, guard, metrics,
+# the corpus verifier and all 13 self-checks — runs on the standard library.
+run = ["anthropic>=0.40"]
