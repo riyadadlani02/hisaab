@@ -74,8 +74,9 @@ def build(llm, call, scenario, actions, turn_no):
     return g.compile()
 
 
-def run(scenario, llm, guard_on=True, approve_confirms=True, max_steps=8):
-    s = getattr(simmod, scenario.fixture)()
+def run(scenario, llm, guard_on=True, approve_confirms=True, max_steps=8,
+        backend=None):
+    s = backend() if backend else getattr(simmod, scenario.fixture)()
     sess = Session()
     call = (wrap(s, sess, on_confirm=lambda v, t, a: approve_confirms)
             if guard_on else (lambda t, a: (s.call(t, a), None)))
@@ -98,28 +99,61 @@ def run(scenario, llm, guard_on=True, approve_confirms=True, max_steps=8):
     return actions, messages
 
 
+
+def _load_env():
+    """Read ~/hisaab/.env if present. Keeps secrets off the command line and out
+    of shell history — the harness never wants a key pasted anywhere it is
+    logged. `.env` is gitignored."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.join(root, ".env")
+    if not os.path.exists(path):
+        return
+    for line in open(path):
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+
 def main(argv=None):
+    _load_env()
     root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
     ap = argparse.ArgumentParser(prog="hisaab.runner_langgraph")
     ap.add_argument("--scenarios", default=os.path.join(root, "scenarios", "seed.jsonl"))
     ap.add_argument("--model", default=MODEL)
     ap.add_argument("--family")
     ap.add_argument("--out", default="runs/langgraph.json")
+    ap.add_argument("--backend", choices=("sim", "sandbox"), default="sim",
+                    help="sandbox = Razorpay Test Mode. unit/indic families only, "
+                         "payment links and orders only, never a refund or payout.")
     a = ap.parse_args(argv)
 
     scenarios = [s for s in load(a.scenarios) if not a.family or s.family == a.family]
+    backend = None
+    if a.backend == "sandbox":
+        from .rzp_sandbox import RzpSandbox, runnable
+        scenarios = runnable(scenarios)
+        live = RzpSandbox()                   # raises on a non-test key
+        backend = lambda: live
+        print("sandbox run %s: %d scenarios, links+orders only"
+              % (live.run_id, len(scenarios)), file=sys.stderr)
     llm = _model(a.model)
     out, raw = {}, {}
     for label, guard_on, approve in (("no_guard", False, True), ("hisaab", True, True),
                                      ("hisaab_unattended", True, False)):
         acts = []
         for sc in scenarios:
-            acts.extend(run(sc, llm, guard_on=guard_on, approve_confirms=approve)[0])
+            acts.extend(run(sc, llm, guard_on=guard_on, approve_confirms=approve,
+                            backend=backend)[0])
             print("  %-18s %-10s %d calls" % (label, sc.id, len(acts)), file=sys.stderr)
         out[label] = summarize(acts)
         raw[label] = [{"scenario": x.scenario_id, "tool": x.tool, "args": x.args,
                        "guard": x.guard_decision, "executed": x.executed,
                        "correct": x.correct} for x in acts]
+
+    if backend is not None:
+        cancelled = backend().cleanup()
+        print("cancelled %d payment links created by this run" % len(cancelled),
+              file=sys.stderr)
 
     print(table(out["no_guard"], out["hisaab"]))
     os.makedirs(os.path.dirname(a.out) or ".", exist_ok=True)

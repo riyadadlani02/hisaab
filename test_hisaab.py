@@ -226,6 +226,44 @@ def t_metrics():
     assert "no guard" in table(b, g)
 
 
+def t_sandbox_backend_cannot_move_money():
+    """The Razorpay Test Mode backend is fenced structurally, not procedurally.
+    There is no code path in it to a refund, a payout or a settlement, and a
+    live key raises before a single request leaves the process."""
+    from hisaab.rzp_sandbox import ALLOWED, LiveKeyRefused, RzpSandbox, runnable
+    from hisaab.taxonomy import Tier, tier
+
+    for name in ALLOWED:
+        assert tier(name) <= Tier.REVERSIBLE, "%s is above REVERSIBLE" % name
+
+    for key in ("rzp_live_abcdef", "abcdef", ""):
+        try:
+            RzpSandbox(key_id=key, key_secret="s")
+            raise AssertionError("accepted non-test key %r" % key)
+        except LiveKeyRefused:
+            pass
+
+    s = RzpSandbox(dry_run=True)
+    for tool, args in (("create_refund", {"payment_id": "pay_A1", "amount": 1}),
+                       ("create_payout", {"fund_account_id": "fa_x", "amount": 1}),
+                       ("create_instant_settlement", {"amount": 1}),
+                       ("capture_payment", {"payment_id": "pay_A1", "amount": 1})):
+        assert s.call(tool, args)["error"]["code"] == "SANDBOX_REFUSED", tool
+
+    ok = s.call("create_payment_link", {"amount": 12500})
+    assert ok["body"]["amount"] == 12500 and ok["body"]["notes"]["hisaab_run"]
+
+    picked = runnable(load_all())
+    assert picked and not any(x.injected for x in picked)
+    assert {x.family for x in picked} <= {"unit", "indic"}
+
+
+def load_all():
+    root = os.path.dirname(os.path.abspath(__file__))
+    return __import__("hisaab.scenarios", fromlist=["load"]).load(
+        os.path.join(root, "scenarios", "seed.jsonl"))
+
+
 def t_langgraph_runner_wires_the_guard_into_the_tool_node():
     """The second runner exists to rule out 'you found that because of how you
     built your loop'. This proves the graph, the guard placement and the Action

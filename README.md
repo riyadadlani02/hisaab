@@ -110,7 +110,7 @@ paid for, so no number for it appears anywhere in this repo.
 - **130 machine-composed** Indic scenarios, `verified: false`, audited
   separately and excluded from every headline number until a human signs off on
   naturalness (`python -m hisaab.annotate`)
-- 18 scripted checks + the mutation audit, both free of API access
+- 19 scripted checks + the mutation audit, both free of API access
 - two runner shapes (hand-written loop, LangGraph), same tools and guard
 - the audit found seven defects in the guard and one in itself; all are written up
 - second-annotator instrument built; **the pass has not been run**, and the
@@ -147,8 +147,21 @@ the delta. Tool descriptions mirror `razorpay-mcp-server`'s wording, "in paise"
 included: softening them would measure our documentation, not the failure a
 merchant will hit.
 
-**The simulator is the only target.** Never point fault injection or the
-injection family at Razorpay's real test environment.
+**The simulator is the default target**, and the only one for adversarial work.
+One narrow exception exists so the paise boundary can be shown failing against
+the real endpoint rather than only a simulator:
+
+```bash
+python -m hisaab.runner_langgraph --backend sandbox --family indic
+```
+
+That path runs `unit` and `indic` against Razorpay **Test Mode** through a
+seven-tool whitelist — payment links and orders, all `READ` or `REVERSIBLE`.
+`hisaab/rzp_sandbox.py` has no code path to a refund, a payout or a settlement;
+a key not starting with `rzp_test_` raises before any request is sent; injection
+scenarios are filtered out in code; and every link created is cancelled on exit.
+Credentials go in `.env` (gitignored, see `.env.example`), never on a command
+line. Full rules in [DISCLOSURE.md](DISCLOSURE.md).
 
 ## Layout
 
@@ -156,6 +169,7 @@ injection family at Razorpay's real test environment.
 hisaab/taxonomy.py   tool -> reversibility tier, fail-closed
 hisaab/amounts.py    en/hi/hinglish amount grammar, paise conversion
 hisaab/sim.py        local Razorpay surface + poisoned fixtures
+hisaab/rzp_sandbox.py  Razorpay Test Mode, whitelisted to links and orders
 hisaab/guard.py      the middleware
 hisaab/metrics.py    six metrics + the headline unit
 hisaab/scenarios.py  schema, loader, second-opinion verifier

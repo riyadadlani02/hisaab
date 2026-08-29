@@ -92,7 +92,7 @@ def _client():
 
 
 def run(scenario, model=MODEL, guard_on=True, client=None, max_steps=8,
-        approve_confirms=True):
+        approve_confirms=True, backend=None):
     """Returns (actions, transcript). One scenario, one session.
 
     `approve_confirms` is the human. True simulates an attentive operator who
@@ -100,7 +100,7 @@ def run(scenario, model=MODEL, guard_on=True, client=None, max_steps=8,
     BLOCK rules are worth semantically. False is the unattended ceiling, where
     nothing irreversible executes at all; that condition wins every metric here
     trivially, so it is reported beside the other two, never instead of them."""
-    s = getattr(simmod, scenario.fixture)()
+    s = backend() if backend else getattr(simmod, scenario.fixture)()
     sess = Session()
     call = (wrap(s, sess, on_confirm=lambda v, t, a: approve_confirms)
             if guard_on else (lambda t, a: (s.call(t, a), None)))
@@ -143,7 +143,23 @@ def run(scenario, model=MODEL, guard_on=True, client=None, max_steps=8,
     return actions, messages
 
 
+
+def _load_env():
+    """Read ~/hisaab/.env if present. Keeps secrets off the command line and out
+    of shell history — the harness never wants a key pasted anywhere it is
+    logged. `.env` is gitignored."""
+    root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
+    path = os.path.join(root, ".env")
+    if not os.path.exists(path):
+        return
+    for line in open(path):
+        line = line.strip()
+        if line and not line.startswith("#") and "=" in line:
+            k, v = line.split("=", 1)
+            os.environ.setdefault(k.strip(), v.strip().strip("'\""))
+
 def main(argv=None):
+    _load_env()
     ap = argparse.ArgumentParser(prog="hisaab.runner")
     ap.add_argument("--scenarios", default=os.path.join(
         os.path.dirname(os.path.dirname(os.path.abspath(__file__))), "scenarios", "seed.jsonl"))
