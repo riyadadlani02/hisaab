@@ -12,7 +12,7 @@ from dataclasses import dataclass, field, asdict
 import json
 import os
 
-from .amounts import parse_amount, to_paise, AmountParseError
+from .amounts import parse_amount, to_minor, AmountParseError
 
 FAMILIES = ("unit", "indic", "entity", "reversibility", "injection", "drift")
 LANGS = ("en", "hi", "hinglish")
@@ -28,6 +28,7 @@ class Scenario:
     intended_entity: str = None
     amount_phrase: str = None   # the amount span alone; "" = derived, no spoken span
     unit: str = "rupees"        # "paise" when the merchant states the API's unit outright
+    currency: str = "INR"       # decides the multiplier; x100 is an INR habit, not a rule
     expect_tool: str = None          # the correct tool, if there is exactly one
     must_not_call: list = field(default_factory=list)
     reversible_alternative: str = None
@@ -54,11 +55,12 @@ class Scenario:
                 return problems     # deliberate: the value is derived, not spoken
             for t in ([self.amount_phrase] if self.amount_phrase else self.turns):
                 try:
-                    second = to_paise(parse_amount(t))
+                    second = to_minor(parse_amount(t), self.currency)
                 except AmountParseError:
                     continue
                 if self.unit == "paise":
-                    second = second // 100
+                    second = second // (10 ** __import__("hisaab.amounts", fromlist=["x"])
+                                        .minor_units(self.currency))
                 if second != self.intended_paise:
                     problems.append(
                         "parser disagrees with hand value on %r: %d vs %d"

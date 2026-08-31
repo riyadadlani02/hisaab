@@ -45,7 +45,8 @@ TOOLS = [
          "currency": {"type": "string"}}, "required": ["payment_id", "amount"]}},
     {"name": "create_payment_link", "description": "Create a payment link.",
      "input_schema": {"type": "object", "properties": {
-         "amount": {"type": "integer", "description": "Amount in paise."},
+         "amount": {"type": "integer", "description": "Amount in the smallest unit of the currency."},
+         "currency": {"type": "string", "description": "ISO currency code. Defaults to INR."},
          "description": {"type": "string"}}, "required": ["amount"]}},
     {"name": "fetch_all_payments", "description": "Fetch all payments.",
      "input_schema": {"type": "object", "properties": {"count": {"type": "integer"}}}},

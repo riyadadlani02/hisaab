@@ -274,7 +274,43 @@ spoken decimal rather than a pre-converted integer, and the conversion happens
 against the call's own `currency`. After the fix: JPY's 100× error blocks, KWD's
 10× error goes to readback, and both correct values pass with no friction.
 
-The corpus itself is still INR-only. Extending it is not done.
+### The corpus now covers it — 10 scenarios, 112 total
+
+`cur-01` … `cur-10`: five JPY, four KWD, one USD control. `Scenario` carries a
+`currency`, and the second-opinion verifier converts with that currency's
+multiplier — without it the verifier would have checked JPY amounts against an
+INR multiplier and passed wrong values silently.
+
+The mutation catalogue gained `unit/x100_habit`: the value an INR-trained ×100
+produces, generated per scenario. It emits nothing for INR and USD, because
+there the habit *is* correct — which is the point.
+
+| | correct | ×100 habit | | guard |
+|---|---|---|---|---|
+| `cur-01` JPY 500 yen | 500 | 50000 | 100× over | **block** |
+| `cur-02` JPY 12,000 yen | 12000 | 1200000 | 100× over | **block** |
+| `cur-10` JPY *dhai sau* yen | 250 | 25000 | 100× over | **block** |
+| `cur-04` KWD 1.5 dinar | 1500 | 150 | **10× under** | readback |
+| `cur-05` KWD 25 dinar | 25000 | 2500 | **10× under** | readback |
+| `cur-06` KWD 0.250 dinar | 250 | 25 | **10× under** | readback |
+
+The split is the design working, not a shortfall: a 100× gap against the spoken
+amount is unambiguous and gets blocked; a 10× gap is not distinguishable from a
+merchant genuinely meaning a smaller number, so it is surfaced with both figures
+named. `cur-10` is the compound case — an Indic fractional amount (*dhai sau* =
+250) in a zero-decimal currency, both hazards in one utterance.
+
+**A regression the audit caught immediately.** The first version of the mutation
+generator didn't put `currency` in the call arguments, so the guard converted
+JPY amounts with an INR multiplier and waved all nine straight through — silent
+passes went 0 → 28. Fixed by passing the scenario's currency into the call.
+
+That failure is also a real gap, now stated in the code: **Razorpay defaults to
+INR when `currency` is absent**, so an agent that simply omits the field gets
+INR semantics on a yen link. Not covered by this corpus.
+
+Audit after the change: 614 wrong calls → **479 blocked, 135 readback, 0
+allowed**, false positives unchanged at 0%.
 
 ## 4. Full corpus — 102 scenarios, GPT-4.1
 

@@ -36,10 +36,9 @@ merchant said out loud, and each slip is off by exactly the currency multiplier
 (×100 for INR).
 
 The multiplier is **currency-dependent**, which widens the target: JPY has no
-minor unit (×1) and KWD has three decimal places (×1000), so an agent that has
-learned "multiply by 100" is wrong for both. This corpus only tests INR;
-extending it to a zero-decimal and a three-decimal currency is the obvious next
-run and is not done.
+minor unit (×1) and KWD has three decimals (×1000), so an agent that learned
+"multiply by 100" is wrong for both — and in opposite directions. GPT-4.1 got
+4 of 6 wrong once currency varied. Covered by `cur-01`…`cur-10`.
 
 Measured against Razorpay **Test Mode**, not a simulator: **8 of 8 amounts
 accepted, including all four 100×-under slips**, with no warning and no
@@ -129,7 +128,7 @@ it".
 **The model error rate is not yet measured.** No model-in-the-loop run has been
 paid for, so no number for it appears anywhere in this repo.
 
-- **102 hand-verified** scenarios across 6 families, en / hi / hinglish
+- **112 hand-verified** scenarios across 6 families, en / hi / hinglish, INR / JPY / KWD / USD
 - **130 machine-composed** Indic scenarios, `verified: false`, audited
   separately and excluded from every headline number until a human signs off on
   naturalness (`python -m hisaab.annotate`)
