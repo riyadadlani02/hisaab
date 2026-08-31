@@ -228,3 +228,59 @@ if __name__ == "__main__":
     from hisaab.runner import _load_env
     _load_env()
     _probe_main()
+
+
+# --- currency multiplier probe -----------------------------------------------
+# A Razorpay engineer's correction: amounts are held in the currency's actual
+# unit with a base amount alongside, and the base is currency-dependent. If so,
+# "multiply by 100" is an INR habit, not a rule — and an agent that learned it
+# from INR examples is wrong elsewhere. This establishes the ground truth before
+# any model is asked to reproduce it.
+#
+#   INR  2 decimals -> x100    Rs 125.00  = 12500
+#   JPY  0 decimals -> x1      JPY 500    = 500
+#   KWD  3 decimals -> x1000   KWD 1.500  = 1500
+#
+# Each row sends both the correct value and the value an INR-trained ×100 habit
+# produces, so the gap is visible rather than argued.
+CURRENCY_PROBE = [
+    ("INR", "125.00",  12500,  12500),
+    ("JPY", "500",       500,  50000),
+    ("KWD", "1.500",    1500,     150),
+    ("USD", "5.00",      500,     500),
+]
+
+
+def currency_probe(sandbox):
+    rows = []
+    for cur, human, correct, habit in CURRENCY_PROBE:
+        for label, amount in (("correct", correct), ("x100 habit", habit)):
+            if label == "x100 habit" and amount == correct:
+                continue                       # nothing to compare for INR/USD
+            out = sandbox.call("create_payment_link", {
+                "amount": amount, "currency": cur,
+                "description": "hisaab currency probe %s %s" % (cur, label)})
+            err = out.get("error") if isinstance(out, dict) else None
+            rows.append({"currency": cur, "human": human, "case": label,
+                         "sent": amount, "accepted": not err,
+                         "got_amount": (out or {}).get("amount"),
+                         "got_currency": (out or {}).get("currency"),
+                         "error": (err or {}).get("description")})
+    return rows
+
+
+def _currency_main():
+    s = RzpSandbox(); s.throttle = 2.0
+    print("Razorpay Test Mode, currency multiplier probe, run %s\n" % s.run_id)
+    rows = currency_probe(s)
+    print("%-5s %-10s %-11s %10s  %-9s %10s  %s"
+          % ("cur", "intended", "case", "sent", "accepted", "stored", "note"))
+    print("-" * 82)
+    for r in rows:
+        print("%-5s %-10s %-11s %10s  %-9s %10s  %s"
+              % (r["currency"], r["human"], r["case"], r["sent"],
+                 "YES" if r["accepted"] else "no",
+                 r["got_amount"] if r["accepted"] else "-",
+                 "" if r["accepted"] else (r["error"] or "")[:34]))
+    print("\ncancelled %d links" % len(s.cleanup()))
+    return rows

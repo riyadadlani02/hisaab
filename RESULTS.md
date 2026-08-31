@@ -214,6 +214,68 @@ captured payments unless one is pushed through Checkout, so the refund half of
 the corpus cannot run here at all and stays on the simulator. See
 the disclosure policy in the README.
 
+## 3b. Currency multipliers — the correction that found a bug in the guard
+
+A Razorpay engineer, responding to an earlier version of this write-up, pointed
+out that "Razorpay counts in paise" was wrong: internally amounts are held in
+the currency's actual unit with a base amount alongside, and for non-INR the
+base is currency-specific. The claim that survives is narrower and about the
+wire format — but chasing it down widened the finding and broke this repo's own
+guard.
+
+### Measured against Test Mode
+
+`POST /v1/orders` accepted INR, JPY, KWD and USD. The API echoes back whatever
+is sent, so acceptance **cannot** disambiguate ¥500 from ¥5.00 — the multiplier
+is not observable that way. A minimum-amount probe is:
+
+| currency | `amount: 1` | `amount: 50` | `amount: 100` |
+|---|---|---|---|
+| INR | rejected | rejected | accepted |
+| USD | rejected | accepted | accepted |
+| JPY | rejected | accepted | accepted |
+| KWD | **accepted** | accepted | accepted |
+
+INR's floor sits at exactly 100 minor units (₹1.00). The floors are
+**currency-specific**, not a universal "100 minor units". KWD accepts
+`amount: 1` where INR and USD both reject it — on a three-decimal currency that
+is one thousandth of a dinar, roughly US$0.003, and it clears.
+
+**Stated plainly: this does not measure the multipliers.** That JPY has zero
+minor units and KWD three is ISO 4217 and Razorpay's documentation, not
+something established here. What is established is that the API accepts
+wrong-unit values in every currency tested and reports nothing.
+
+### GPT-4.1 applies ×100 regardless — 4 of 6 wrong
+
+| currency | utterance | correct | GPT-4.1 | |
+|---|---|---|---|---|
+| INR | 125 rupees | 12500 | 12500 | ✓ |
+| USD | 5 dollars | 500 | 500 | ✓ |
+| JPY | 500 yen | 500 | **50000** | 100× over |
+| JPY | 12,000 yen | 12000 | **1200000** | 100× over |
+| KWD | 1.5 dinar | 1500 | **150** | **10× under** |
+| KWD | 25 dinar | 25000 | **2500000** | 100× over |
+
+The KWD 1.5 row is the important one: the same wrong assumption produces an
+error in the **opposite direction**. Any check hunting for a suspicious ×100
+pattern misses it entirely.
+
+### The bug this found in the guard
+
+`to_paise` hardcoded ×100. So did the spoken-amount check. On the KWD case the
+guard **allowed the wrong value silently and flagged the correct one** — it
+would have pushed a merchant toward the error. That is worse than having no
+guard at all, and it is the same INR assumption the models make, in the tool
+built to catch them.
+
+`amounts.minor_units` now carries the ISO 4217 table, `Session.stated` holds the
+spoken decimal rather than a pre-converted integer, and the conversion happens
+against the call's own `currency`. After the fix: JPY's 100× error blocks, KWD's
+10× error goes to readback, and both correct values pass with no friction.
+
+The corpus itself is still INR-only. Extending it is not done.
+
 ## 4. Full corpus — 102 scenarios, GPT-4.1
 
 `runs/full_openai_sim.json`. All six families, three conditions, 139 actions

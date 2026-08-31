@@ -190,7 +190,7 @@ def t_semantic_amount_error_is_surfaced_not_blocked():
     the discrepancy and a human decides."""
     sess = Session()
     sess.note_human("paune do hazaar refund kar do pay_A1 par.")
-    assert [p for _, p in sess.stated] == [175000], sess.stated   # not 175200: "kar do"
+    assert [float(a) for _, a in sess.stated] == [1750.0], sess.stated  # not 1752: "kar do"
     v = check("create_refund", {"payment_id": "pay_A1", "amount": 200000}, sess)
     assert v.decision == CONFIRM and any("amount-mismatch" in r for r in v.reasons), v
 
@@ -203,11 +203,37 @@ def t_spoken_amount_beats_a_ratio_coincidence():
     sess = Session()
     sess.note_human("Refund 1250 paise on pay_B1.")            # Rs 12.50
     sess.note_tool_result(s.call("fetch_payment", {"payment_id": "pay_B1"}))
-    assert [p for _, p in sess.stated] == [1250], sess.stated
+    assert [float(a) for _, a in sess.stated] == [12.5], sess.stated
     v = check("create_refund", {"payment_id": "pay_B1", "amount": 1250}, sess)
     assert v.decision == CONFIRM, v            # readback only, not blocked
     over = check("create_refund", {"payment_id": "pay_B1", "amount": 999999}, sess)
     assert over.decision == BLOCK, over        # over-amount still applies
+
+
+def t_multiplier_is_currency_dependent():
+    """x100 is an INR habit, not a rule. A Razorpay engineer pointed this out and
+    it turned out to be a bug in this guard, not just in the models.
+
+    Before the fix the guard ALLOWED the wrong KWD value and flagged the correct
+    one — it would have pushed a merchant toward the error. That is worse than
+    having no guard, and it is the same INR assumption the models make."""
+    from hisaab.amounts import minor_units, to_minor
+
+    assert (minor_units("INR"), minor_units("JPY"), minor_units("KWD")) == (2, 0, 3)
+    assert to_minor("125", "INR") == 12500      # Rs 125.00
+    assert to_minor("500", "JPY") == 500        # no minor unit at all
+    assert to_minor("1.5", "KWD") == 1500       # three decimals
+
+    # JPY: the x100 habit overcharges a hundredfold. Unambiguous -> block.
+    s = Session(); s.note_human("Create a payment link for 500 Japanese yen.")
+    assert check("create_payment_link", {"amount": 50000, "currency": "JPY"}, s).decision == BLOCK
+    assert check("create_payment_link", {"amount": 500, "currency": "JPY"}, s).decision == ALLOW
+
+    # KWD: the habit UNDERcharges tenfold. Wrong direction for a x100 rule, so
+    # it can only be surfaced, not blocked.
+    k = Session(); k.note_human("Create a payment link for 1.5 Kuwaiti dinar.")
+    assert check("create_payment_link", {"amount": 150, "currency": "KWD"}, k).decision == CONFIRM
+    assert check("create_payment_link", {"amount": 1500, "currency": "KWD"}, k).decision == ALLOW
 
 
 def t_wrong_object_type():

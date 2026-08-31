@@ -19,7 +19,7 @@ and the other expires on its own.
 from dataclasses import dataclass, field
 import re
 
-from .amounts import extract_amounts, to_paise
+from .amounts import extract_amounts, to_minor
 from .taxonomy import (tier, Tier, AMOUNT_ARGS, ENTITY_ARGS, FREE_TEXT_KEYS)
 
 ALLOW, CONFIRM, BLOCK = "allow", "confirm", "block"
@@ -54,15 +54,15 @@ class Session:
     anchors: dict = field(default_factory=dict)       # entity id -> amount in paise
     confirmed: set = field(default_factory=set)       # readback keys the human approved
     idempotency: set = field(default_factory=set)
-    stated: list = field(default_factory=list)        # (span, paise) the human actually said
+    stated: list = field(default_factory=list)        # (span, decimal amount) the human said
 
     # ---- provenance intake ------------------------------------------
     def note_human(self, text):
         # The merchant's own words are the only ground truth available at
         # runtime for what the amount was supposed to be. A prior read anchors
         # the *ceiling*; only the utterance anchors the intent.
-        for span, rupees in extract_amounts(text or ""):
-            self.stated.append((span, to_paise(rupees)))
+        for span, amount in extract_amounts(text or ""):
+            self.stated.append((span, amount))
         for m in ID_RE.findall(text or ""):
             self.from_human.add(m)
             self.provenance[m] = "human"      # a person naming it is authoritative
@@ -152,15 +152,18 @@ def check(tool, args, sess):
     # from an ordinary partial refund.
     spoken_ok = False
     if amount is not None and sess.stated and t >= Tier.REVERSIBLE:
-        said = {p for _, p in sess.stated}
+        cur = args.get("currency") or "INR"
+        said = {to_minor(a, cur) for _, a in sess.stated}
         spoken_ok = amount in said
         if not spoken_ok:
             if any(amount * 100 == p or amount == p * 100 for p in said):
-                escalate(BLOCK, "unit-vs-spoken: merchant said %s; call carries %d paise"
-                         % (" / ".join("%s (%d paise)" % (sp, p) for sp, p in sess.stated), amount))
+                escalate(BLOCK, "unit-vs-spoken: merchant said %s; call carries %d (%s minor units)"
+                         % (" / ".join("%s = %d" % (sp, to_minor(a, cur)) for sp, a in sess.stated),
+                            amount, cur))
             else:
-                escalate(CONFIRM, "amount-mismatch: merchant said %s; call carries %d paise"
-                         % (" / ".join("%s (%d paise)" % (sp, p) for sp, p in sess.stated), amount))
+                escalate(CONFIRM, "amount-mismatch: merchant said %s; call carries %d (%s minor units)"
+                         % (" / ".join("%s = %d" % (sp, to_minor(a, cur)) for sp, a in sess.stated),
+                            amount, cur))
 
     # --- entity binding ----------------------------------------------
     # Right action, wrong person. The failure nobody's success rate measures.

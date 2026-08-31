@@ -157,9 +157,33 @@ def parse_amount(text):
     return total + current
 
 
+# ISO 4217 minor units. x100 is an INR habit, not a rule, and a Razorpay
+# engineer's correction is what surfaced it: the API takes the currency's
+# smallest unit, and how small that is depends on the currency.
+#
+# Measured on GPT-4.1: it applies x100 regardless. JPY 500 became 50000 (a
+# hundredfold overcharge) and KWD 1.5 became 150 (a tenfold undercharge) —
+# errors in opposite directions, from one wrong assumption.
+MINOR_UNITS = {
+    "JPY": 0, "KRW": 0, "VND": 0, "CLP": 0, "ISK": 0, "XOF": 0, "XAF": 0,
+    "KWD": 3, "BHD": 3, "OMR": 3, "JOD": 3, "TND": 3, "IQD": 3, "LYD": 3,
+}   # everything not listed is 2
+
+
+def minor_units(currency):
+    return MINOR_UNITS.get((currency or "INR").upper(), 2)
+
+
+def to_minor(amount, currency="INR"):
+    """Convert a human amount to the currency's smallest unit — the value the
+    API actually wants."""
+    scale = Decimal(10) ** minor_units(currency)
+    return int((Decimal(amount) * scale).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+
+
 def to_paise(rupees):
-    """Razorpay's wire unit. The single most common 100x error in agent code."""
-    return int((Decimal(rupees) * 100).quantize(Decimal("1"), rounding=ROUND_HALF_UP))
+    """INR shorthand for to_minor. Kept because most of the corpus is INR."""
+    return to_minor(rupees, "INR")
 
 
 def magnitude_bucket(called_paise, intended_paise):
