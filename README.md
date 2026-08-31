@@ -29,9 +29,17 @@ what an agent may do unsupervised — see [`hisaab/taxonomy.py`](hisaab/taxonomy
 
 ## The three findings under test
 
-**1. The paise trap.** Razorpay's API takes amounts in paise. `amount: 50000`
-is ₹500. An LLM writing tool calls from natural language crosses that boundary
-on every call, and every error is off by exactly 100×.
+**1. The paise trap.** Razorpay's API takes `amount` in the currency's smallest
+unit — `50000` is ₹500. Razorpay's own systems are consistent about this, and a
+developer reads the rule once. An agent re-derives it on every call from what a
+merchant said out loud, and each slip is off by exactly the currency multiplier
+(×100 for INR).
+
+The multiplier is **currency-dependent**, which widens the target: JPY has no
+minor unit (×1) and KWD has three decimal places (×1000), so an agent that has
+learned "multiply by 100" is wrong for both. This corpus only tests INR;
+extending it to a zero-decimal and a three-decimal currency is the obvious next
+run and is not done.
 
 Measured against Razorpay **Test Mode**, not a simulator: **8 of 8 amounts
 accepted, including all four 100×-under slips**, with no warning and no

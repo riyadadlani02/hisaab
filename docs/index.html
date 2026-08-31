@@ -155,9 +155,10 @@ footer .nm{font-weight:600;color:#fff;font-size:20px;letter-spacing:-.03em}
   <div class="wrap">
     <div class="eyebrow">hisaab · agent tool safety for payments</div>
     <h1>An AI agent knew the amount was ₹1,50,000. It charged ₹15,000.</h1>
-    <p class="lede">Razorpay's API counts in <strong>paise</strong>, not rupees. When a language model
-      writes tool calls from what a merchant said out loud, every slip across that boundary is off by
-      exactly 100×. This is a measurement of how often that happens, and a runtime guard that catches it.</p>
+    <p class="lede">Razorpay's API takes <strong>amount</strong> in the currency's smallest unit —
+      paise for INR. A developer reads that once. A language model re-derives it on every call, from
+      what a merchant said out loud, and each slip is off by exactly the currency's multiplier. This is
+      a measurement of how often that happens, and a runtime guard that catches it.</p>
 
     <div class="artifact">
       <div class="bar"><span>Payment link · created</span><span class="mono">TEST MODE</span></div>
