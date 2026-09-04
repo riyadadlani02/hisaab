@@ -142,6 +142,18 @@ footer .nm{font-weight:600;color:#fff;font-size:20px;letter-spacing:-.03em}
   font-size:15px;padding:13px 26px;border-radius:4px;margin-top:10px}
 .cta:hover{background:var(--blue-dk)}
 :focus-visible{outline:2px solid var(--blue);outline-offset:3px;border-radius:2px}
+
+/* the film */
+.film{background:var(--ink-deep);border-top:1px solid var(--line)}
+.film .eyebrow{color:#6E9BFF}
+.film h2{color:#fff}
+.film .lede{color:rgba(255,255,255,.6)}
+.film video{width:100%;display:block;border-radius:14px;margin-top:32px;
+  background:#0C0D11;box-shadow:0 24px 60px rgba(0,0,0,.45)}
+.film .meta{display:flex;flex-wrap:wrap;gap:8px 26px;margin-top:20px;
+  font:400 13.5px/1.5 var(--mono);color:rgba(255,255,255,.45)}
+.film .meta b{color:rgba(255,255,255,.8);font-weight:400}
+
 @media (max-width:640px){section{padding:60px 0}.hero{padding:52px 0 72px}}
 @media (prefers-reduced-motion:no-preference){
   .artifact{animation:rise .65s cubic-bezier(.2,.7,.3,1) both .12s}
@@ -182,6 +194,26 @@ footer .nm{font-weight:600;color:#fff;font-size:20px;letter-spacing:-.03em}
     </div>
   </div>
 </header>
+
+<section class="film">
+  <div class="wrap">
+    <div class="eyebrow">Three minutes</div>
+    <h2>The finding, and the guard, on camera</h2>
+    <p class="lede">A merchant says <em>sava lakh</em>. The agent writes 125000 into a field documented
+      in paise, and Razorpay returns 200 OK for an order worth &#8377;1,250. Then the same call with
+      the guard in the middle. The terminal in the film is a real run against Test Mode, not a mockup.</p>
+    <video controls preload="metadata" poster="pitch-poster.jpg" playsinline>
+      <source src="pitch.mp4" type="video/mp4">
+      <a href="pitch.mp4">Download the film (MP4, 10&nbsp;MB)</a>
+    </video>
+    <div class="meta">
+      <span><b>3:00</b> &middot; 1080p</span>
+      <span>live demo: <b>create_order</b> &rarr; 200 OK &rarr; <b>BLOCK</b></span>
+      <span>audit re-run: <b>614</b> wrong calls, <b>0</b> allowed silently</span>
+      <span><a href="pitch.mp4" style="color:#6E9BFF">direct link</a></span>
+    </div>
+  </div>
+</section>
 
 <section>
   <div class="wrap">
